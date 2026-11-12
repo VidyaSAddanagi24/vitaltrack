@@ -80,7 +80,7 @@
         <div class="native-badges" id="native-badges">
           <div class="nb" id="nb-vibration"><span class="nb-dot"></span>Vibration</div>
           <div class="nb" id="nb-notification"><span class="nb-dot"></span>Notifications</div>
-          <div class="nb" id="nb-network"><span class="nb-dot"></span>Native</div>
+          <div class="nb" id="nb-network"><span class="nb-dot"></span><span id="sync-badge">Not paired</span></div>
         </div>
 
         <!-- Activity rings -->
@@ -405,6 +405,29 @@
           <div class="info-row"><span class="info-label">Exercise</span><span class="info-value">30 min per day</span></div>
         </div>
 
+        <div class="section-label">PATIENT ALERT SYNC</div>
+        <form class="group-card sync-card" id="sync-form">
+          <label class="field" for="sync-server">
+            <span class="field-label">Server URL (origin only)</span>
+            <input class="field-input" id="sync-server" type="url" required
+                   placeholder="http://health-server.local:8000" autocomplete="off"
+                   autocapitalize="none" spellcheck="false" aria-describedby="sync-note" />
+          </label>
+          <label class="field" for="sync-code">
+            <span class="field-label">6-digit code from dashboard</span>
+            <input class="field-input" id="sync-code" type="text" required
+                   inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6"
+                   autocomplete="off" placeholder="000000" />
+          </label>
+          <div class="test-row">
+            <button class="test-chip review" id="sync-connect" type="submit">Connect</button>
+            <button class="test-chip" id="sync-disconnect" type="button" disabled>Disconnect</button>
+          </div>
+          <div class="sync-patient" id="sync-patient">No patient paired</div>
+          <div class="sync-status" id="sync-status" role="status" aria-live="polite">Not paired</div>
+          <p class="sync-note" id="sync-note">Keep this app open and phone on same network; background delivery not guaranteed. Browser preview must use this server's own /vitaltrack/ address. HTTP LAN traffic is unencrypted; use a trusted network or HTTPS.</p>
+        </form>
+
         <div class="section-label">ALERTS</div>
         <div class="group-card">
           <div class="info-row">
@@ -566,5 +589,6 @@
   <script src="cordova.js"></script>
   <script src="js/jspdf.umd.min.js"></script>
   <script src="js/index.js"></script>
+  <script src="js/sync.js"></script>
 </body>
 </html>

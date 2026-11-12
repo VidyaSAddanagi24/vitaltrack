@@ -27,6 +27,7 @@ const Native = (() => {
   let _notifPermWarned   = false;
   let _exactAlarmOk      = false;
   let _notifIdCounter    = 100;
+  let _notificationGeneration = 0;
 
   /**
    * Vibrate the device.
@@ -77,6 +78,8 @@ const Native = (() => {
    * @param {Object} opts
    */
   function scheduleNotification(opts) {
+    // Re-check after asynchronous permission requests as well as at alert time.
+    if (!alertsEnabled()) return;
     if (!_notificationAvail) {
       console.info('[Notification] Plugin not available');
       return;
@@ -84,7 +87,9 @@ const Native = (() => {
 
     if (!_notifPermGranted) {
       console.warn('[Notification] Permission missing — requesting before schedule');
+      const generation = _notificationGeneration;
       cordova.plugins.notification.local.requestPermission(granted => {
+        if (generation !== _notificationGeneration || !alertsEnabled()) return;
         _notifPermGranted = granted;
         if (granted) scheduleNotification(opts);
         else UI.updateNativeBadges(true, false, _cordovaReady);
@@ -119,11 +124,12 @@ const Native = (() => {
 
     cordova.plugins.notification.local.schedule(
       payload,
-      notif => console.log('[Notification] Scheduled id=' + id, notif)
+      () => console.log('[Notification] Scheduled id=' + id)
     );
   }
 
   function cancelAllNotifications() {
+    _notificationGeneration++;
     if (!_notificationAvail) return;
     cordova.plugins.notification.local.cancelAll(
       () => console.log('[Notification] All cancelled')
@@ -263,6 +269,9 @@ let vitalsTickN  = 0;
 ════════════════════════════════════════════════════════════════ */
 const $  = id  => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
+const alertsEnabled = () => $('notif-toggle')?.checked !== false;
+const patientSyncActive = () => !!(window.PatientSync &&
+  (window.PatientSync.isPaired || window.PatientSync.isConnecting));
 
 const pad2 = n => String(n).padStart(2, '0');
 const fmtClock = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
@@ -304,7 +313,7 @@ const UI = (() => {
     }
     _set('nb-vibration',    vibration);
     _set('nb-notification', notifications);
-    _set('nb-network',      network);
+    // Sync owns the network badge; native API availability is not connectivity.
   }
 
   function setDevicePill(label, connected) {
@@ -329,7 +338,7 @@ const UI = (() => {
   function _applyDot() {
     const dot = $('pulse-dot'); if (!dot) return;
     dot.className = 'pulse-dot';
-    if (!state.telemetryRunning) return;
+    if (!state.telemetryRunning && !window.PatientSync?.isConnected) return;
     if (_phase === 'watch' || _phase === 'review' || _phase === 'urgent') {
       dot.classList.add('alert-' + _phase);
     } else {
@@ -359,7 +368,10 @@ const UI = (() => {
     function _set(id, val, unit, trendId, pVal) {
       const el = $(id);
       if (el) {
-        el.innerHTML = `${val} <span>${unit}</span>`;
+        el.textContent = `${val == null ? '—' : val} `;
+        const unitEl = document.createElement('span');
+        unitEl.textContent = unit;
+        el.appendChild(unitEl);
         const card = el.closest('.metric-tile');
         if (card) {
           card.classList.remove('vital-flash');
@@ -378,10 +390,10 @@ const UI = (() => {
 
   function updateChartCurrents(s) {
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-    set('chart-hr-val',   s.hr);
-    set('chart-spo2-val', s.spo2);
-    set('chart-rr-val',   s.rr);
-    set('chart-temp-val', s.temp);
+    set('chart-hr-val',   s.hr ?? '—');
+    set('chart-spo2-val', s.spo2 ?? '—');
+    set('chart-rr-val',   s.rr ?? '—');
+    set('chart-temp-val', s.temp ?? '—');
   }
 
   function updateChartStats(vital, min, avg, max) {
@@ -472,14 +484,16 @@ const UI = (() => {
       <div class="notif-icon">${ICONS[type] || ICONS.watch}</div>
       <div class="notif-body">
         <div class="notif-headline">
-          <span class="notif-title">${title}</span>
+          <span class="notif-title"></span>
           <span class="notif-tag">${TAGS[type] || 'Alert'}</span>
         </div>
-        <div class="notif-msg">${msg}</div>
+        <div class="notif-msg"></div>
       </div>
       <button class="notif-close" aria-label="Dismiss">✕</button>
       ${autoDismiss > 0 ? '<div class="notif-progress"></div>' : ''}`;
 
+    banner.querySelector('.notif-title').textContent = title;
+    banner.querySelector('.notif-msg').textContent = msg;
     const bar = banner.querySelector('.notif-progress');
     if (bar) bar.style.animationDuration = autoDismiss + 'ms';
 
@@ -508,7 +522,8 @@ const UI = (() => {
     entry.innerHTML = `
       <div class="log-dot" style="background:${colors[type] || 'rgba(235,235,245,.32)'}"></div>
       <div class="log-time">${ts}</div>
-      <div class="log-text">${text}</div>`;
+      <div class="log-text"></div>`;
+    entry.querySelector('.log-text').textContent = text;
     log.insertBefore(entry, log.firstChild);
     while (log.children.length > 50) log.removeChild(log.lastChild);
   }
@@ -547,6 +562,16 @@ const UI = (() => {
    §5  WEB AUDIO ENGINE
 ════════════════════════════════════════════════════════════════ */
 const Audio = (() => {
+  let generation = 0;
+  function later(fn, delay) {
+    const current = generation;
+    setTimeout(() => { if (current === generation && alertsEnabled()) fn(); }, delay);
+  }
+  function stop() {
+    generation++;
+    if (state.audioCtx) state.audioCtx.close().catch(() => {});
+    state.audioCtx = null;
+  }
   function _ctx() {
     if (!state.audioCtx) {
       try { state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -556,6 +581,7 @@ const Audio = (() => {
     return state.audioCtx;
   }
   function tone(freq, dur, type = 'sine', vol = 0.28) {
+    if (!alertsEnabled()) return;
     const ctx = _ctx(); if (!ctx) return;
     try {
       const osc = ctx.createOscillator();
@@ -569,14 +595,15 @@ const Audio = (() => {
       osc.stop(ctx.currentTime + dur);
     } catch(e) {}
   }
-  const chime = () => { tone(880,0.2,'sine',0.25); setTimeout(()=>tone(1100,0.2,'sine',0.2),240); };
-  const alert = () => { tone(660,0.15,'square',0.2); setTimeout(()=>tone(880,0.15,'square',0.2),190); setTimeout(()=>tone(660,0.15,'square',0.2),380); };
+  const chime = () => { tone(880,0.2,'sine',0.25); later(()=>tone(1100,0.2,'sine',0.2),240); };
+  const alert = () => { tone(660,0.15,'square',0.2); later(()=>tone(880,0.15,'square',0.2),190); later(()=>tone(660,0.15,'square',0.2),380); };
   /* Fallback alarm when native notifications are unavailable: 8 wailing
      sweeps over ~5 s, louder than the notification tones. */
   const alarm = () => {
+    if (!alertsEnabled()) return;
     const ctx = _ctx(); if (!ctx) return;
     for (let i = 0; i < 8; i++) {
-      setTimeout(() => {
+      later(() => {
         try {
           const osc = ctx.createOscillator();
           const g = ctx.createGain();
@@ -597,7 +624,7 @@ const Audio = (() => {
     }
   };
   const prime = () => _ctx();
-  return { chime, alert, alarm, prime };
+  return { chime, alert, alarm, prime, stop };
 })();
 
 
@@ -680,7 +707,8 @@ const Charts = (() => {
   }
 
   function stats(arr) {
-    if (!arr || !arr.length) return { min: '—', avg: '—', max: '—' };
+    arr = (arr || []).filter(Number.isFinite);
+    if (!arr.length) return { min: '—', avg: '—', max: '—' };
     return {
       min: Math.min(...arr),
       avg: +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1),
@@ -720,7 +748,16 @@ const Charts = (() => {
     updateStats();
   }
 
-  return { init, push, updateStats, seed, summary, colors: COLORS };
+  function clear() {
+    Object.values(charts).forEach(chart => {
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.update('none');
+    });
+    updateStats();
+  }
+
+  return { init, push, updateStats, seed, clear, summary, colors: COLORS };
 })();
 
 
@@ -885,34 +922,33 @@ const PHASE_CONFIG = {
 
 let _lastPhase = -1;
 
-function triggerPhase(phase) {
+function triggerPhase(phase, clinicalEvent) {
   const cfg = PHASE_CONFIG[phase]; if (!cfg) return;
-  const title = cfg.title;
-  const text  = cfg.textFn(state);
+  const title = clinicalEvent ? clinicalEvent.title : cfg.title;
+  const text  = clinicalEvent ? clinicalEvent.text : cfg.textFn(state);
 
-  /* 1. Native vibration */
-  Native.vibrate(cfg.vibrate);
+  // Muted alerts still appear in the banner/log, but never reach native APIs.
+  if (alertsEnabled()) {
+    Native.vibrate(cfg.vibrate);
+    Native.scheduleNotification({
+      title,
+      text,
+      channelId: cfg.channelId,
+      sound: cfg.sound,
+      soundUsage: cfg.soundUsage,
+      data: { phase, hr: state.hr, spo2: state.spo2, ts: Date.now() },
+    });
+    if (!Native.notifAvail || !Native.notifPermGranted) cfg.fallbackSound();
+  }
 
-  /* 2. Native OS notification (channel carries the siren + pattern) */
-  Native.scheduleNotification({
-    title:    title,
-    text:     text,
-    channelId:  cfg.channelId,
-    sound:      cfg.sound,
-    soundUsage: cfg.soundUsage,
-    data:     { phase, hr: state.hr, spo2: state.spo2, ts: Date.now() },
-  });
-
-  /* 3. In-app banner */
   UI.showInAppBanner(cfg.type, title, text, cfg.dismiss);
-
-  /* 4. Web Audio — only when the native channel can't be heard */
-  if (!Native.notifAvail || !Native.notifPermGranted) cfg.fallbackSound();
 
   /* 5. Alert log + report history */
   UI.addLogEntry(cfg.type, `${title} — ${text}`);
 
   UI.setPulseDotPhase(cfg.type);
+  // Live connection status must remain owned by sync, including during outages.
+  if (clinicalEvent || patientSyncActive()) return;
   const statusMap = {
     watch:  'Watch alert — routine check-in',
     review: 'Review alert — vitals need attention',
@@ -932,7 +968,10 @@ function triggerPhase(phase) {
 const PHASE_AT = { watch: 20, review: 40, urgent: 60 };
 
 function startTelemetry() {
-  if (state.telemetryRunning) return;
+  if (state.telemetryRunning || patientSyncActive()) return;
+  // Explicit demo restart after disconnect; never mix demo samples with live ones.
+  Object.assign(state, { hr: 72, spo2: 98, rr: 16, temp: 36.6 });
+  Charts.clear();
   Audio.prime();
   state.telemetryRunning = true;
   cycleElapsed = 0; vitalsTickN = 0; _lastPhase = -1;
@@ -1809,7 +1848,7 @@ function onDOMReady() {
 
   Charts.init();
   Ring.init();
-  Charts.seed();
+  if (!patientSyncActive()) Charts.seed();
 
   const noTrend = { hr:state.hr, spo2:state.spo2, rr:state.rr, temp:state.temp };
   UI.updateVitals(state, noTrend);
@@ -1822,6 +1861,8 @@ function onDOMReady() {
   $('notif-toggle')?.addEventListener('change', e => {
     if (!e.target.checked) {
       Native.cancelAllNotifications();
+      Native.vibrate(0);
+      Audio.stop();
       UI.showInAppBanner('watch', 'Alerts muted',
         'Pending native notifications were cancelled.', 6000);
     } else if (typeof cordova !== 'undefined') {
@@ -1838,6 +1879,7 @@ function onDOMReady() {
 
   Reports.init();
   Profile.init();
+  window.PatientSync?.init();
 
   UI.setSplashStatus('Waiting for device…');
 }
@@ -1875,6 +1917,7 @@ function onDeviceReady() {
   const info = Native.getDeviceInfo();
   UI.fillDeviceCard(info);
   UI.setDevicePill(info.platform, true);
+  window.PatientSync?.ready();
 
   setTimeout(() => {
     UI.hideSplash();
@@ -1888,6 +1931,7 @@ function onBrowserFallback() {
   Native.init(false, () => {});
   UI.setDevicePill('Browser', false);
   UI.fillDeviceCard(Native.getDeviceInfo());
+  if (typeof cordova === 'undefined') window.PatientSync?.ready();
   setTimeout(() => UI.hideSplash(), 500);
 }
 

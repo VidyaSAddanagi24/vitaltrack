@@ -17,6 +17,9 @@
         <resource-file src="res/android/raw/vt_watch.wav" target="app/src/main/res/raw/vt_watch.wav" />
         <resource-file src="res/android/raw/vt_review.wav" target="app/src/main/res/raw/vt_review.wav" />
         <resource-file src="res/android/raw/vt_urgent.wav" target="app/src/main/res/raw/vt_urgent.wav" />
+        <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+            <application android:usesCleartextTraffic="true" />
+        </edit-config>
         <config-file parent="/manifest" target="AndroidManifest.xml">
             <uses-permission android:name="android.permission.VIBRATE" />
             <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

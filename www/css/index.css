@@ -1102,6 +1102,16 @@ select.field-input {
 .test-chip.review { color: var(--stand); border-color: rgba(30, 228, 225, .42); }
 .test-chip.urgent { color: var(--error); border-color: rgba(255, 69, 58, .55); }
 
+/* Patient sync: connection state is independent of pairing. */
+.sync-patient { margin-top: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.sync-status { margin-top: 6px; color: var(--gold); font-size: 13px; overflow-wrap: anywhere; }
+.sync-status[data-state="live"] { color: var(--stand); }
+.sync-note { margin: 12px 0 0; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+.sync-card button:disabled, .sync-card input:disabled, #btn-tele-toggle:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 /* ─── Bottom navigation ─────────────────────────────────────── */
 .bottom-nav {
   position: fixed;

@@ -22,10 +22,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
 /**
- * Bridges the two things the web layer cannot do on its own:
- *  - reading real window insets so the black UI can draw edge to edge
- *  - creating the alert notification channels with long vibration patterns
+ * Native window insets, alert channels, and restricted foreground sync HTTP.
+ * This plugin does not provide a background delivery service.
  */
 public class VitalTrackNative extends CordovaPlugin {
 
@@ -62,7 +69,140 @@ public class VitalTrackNative extends CordovaPlugin {
             callbackContext.success();
             return true;
         }
+        if ("requestSync".equals(action)) {
+            cordova.getThreadPool().execute(() -> requestSync(args, callbackContext));
+            return true;
+        }
         return false;
+    }
+
+    private static boolean isLocalHttpHost(String host) {
+        host = host.toLowerCase(Locale.ROOT);
+        if ("localhost".equals(host) || "[::1]".equals(host) ||
+                "[0:0:0:0:0:0:0:1]".equals(host)) return true;
+        if (host.endsWith(".local") && host.matches("[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.local")) {
+            return true;
+        }
+        // Literal dotted IPv4 only: do not resolve public DNS names to permit HTTP.
+        if (!host.matches("[0-9]{1,3}(?:\\.[0-9]{1,3}){3}")) return false;
+        String[] parts = host.split("\\.");
+        int[] octets = new int[4];
+        for (int i = 0; i < 4; i++) {
+            if (parts[i].length() > 1 && parts[i].startsWith("0")) return false;
+            octets[i] = Integer.parseInt(parts[i]);
+            if (octets[i] > 255) return false;
+        }
+        return octets[0] == 127 || octets[0] == 10 ||
+            (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
+            (octets[0] == 192 && octets[1] == 168);
+    }
+
+    private static URI syncOrigin(String server) throws Exception {
+        URI origin = new URI(server);
+        String scheme = origin.getScheme();
+        String host = origin.getHost();
+        String path = origin.getRawPath();
+        if (host == null || origin.getRawUserInfo() != null ||
+                origin.getRawQuery() != null || origin.getRawFragment() != null ||
+                (path != null && !path.isEmpty() && !"/".equals(path)) ||
+                origin.getPort() == 0 || origin.getPort() > 65535 ||
+                !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+            throw new IllegalArgumentException();
+        }
+        if ("http".equalsIgnoreCase(scheme) && !isLocalHttpHost(host)) {
+            throw new IllegalArgumentException();
+        }
+        return origin;
+    }
+
+    private static void syncError(CallbackContext callback, int status, String message) {
+        JSONObject error = new JSONObject();
+        try {
+            error.put("status", status);
+            error.put("message", message);
+        } catch (JSONException ignored) { }
+        callback.error(error);
+    }
+
+    private void requestSync(JSONArray args, CallbackContext callback) {
+        HttpURLConnection connection = null;
+        int status = 0;
+        try {
+            URI origin = syncOrigin(args.getString(0));
+            String path = args.getString(1);
+            String method = args.getString(2);
+            String token = args.optString(3, "");
+            String body = args.isNull(4) ? null : args.getString(4);
+            boolean claim = "POST".equals(method) && "/api/clinical/mobile/claim".equals(path);
+            boolean feed = "GET".equals(method) &&
+                path.matches("/api/clinical/mobile/feed\\?after=[0-9]+");
+            boolean revoke = "DELETE".equals(method) && "/api/clinical/mobile/connection".equals(path);
+            if (!(claim || feed || revoke)) throw new IllegalArgumentException();
+            if (claim) {
+                if (!token.isEmpty() || body == null) throw new IllegalArgumentException();
+                JSONObject payload = new JSONObject(body);
+                if (payload.length() != 1 || !(payload.get("code") instanceof String) ||
+                        !payload.getString("code").matches("[0-9]{6}")) {
+                    throw new IllegalArgumentException();
+                }
+            } else if (body != null || !token.matches("[\\x21-\\x7E]+")) {
+                throw new IllegalArgumentException();
+            }
+
+            connection = (HttpURLConnection) origin.resolve(path).toURL().openConnection();
+            connection.setInstanceFollowRedirects(false); // Never forward a bearer token.
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setUseCaches(false);
+            connection.setRequestMethod(method);
+            connection.setRequestProperty("Accept", "application/json");
+            if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
+            if (body != null) {
+                byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.setFixedLengthStreamingMode(bytes.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(bytes);
+                }
+            }
+            status = connection.getResponseCode();
+            if (status >= 300 && status < 400) {
+                syncError(callback, status, "Redirects are not allowed");
+                return;
+            }
+            boolean success = status >= 200 && status < 300;
+            String response = "";
+            try (InputStream input = success ? connection.getInputStream() : connection.getErrorStream();
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                if (input != null) {
+                    byte[] buffer = new byte[4096];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        if (output.size() + count > 1024 * 1024) {
+                            throw new java.io.IOException("Response too large");
+                        }
+                        output.write(buffer, 0, count);
+                    }
+                    response = new String(output.toByteArray(), StandardCharsets.UTF_8);
+                }
+            }
+            if (success) {
+                callback.success(response.trim().isEmpty() ? new JSONObject() : new JSONObject(response));
+            } else {
+                String message = "Sync request failed";
+                try { message = new JSONObject(response).optString("message", message); }
+                catch (JSONException ignored) { }
+                syncError(callback, status, message);
+            }
+        } catch (IllegalArgumentException e) {
+            syncError(callback, 0, "Invalid sync origin, endpoint, or request");
+        } catch (Exception e) {
+            // Do not expose URLs, request bodies, or credentials in errors/logs.
+            syncError(callback, status, "Sync request failed or timed out");
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private Context ctx() {
