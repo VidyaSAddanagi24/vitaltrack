@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.ishan.vitaltrack" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>VitalTrack</name>
+    <description>Smart Wearable Health Tracker — Real-Time Telemetry and Alerts</description>
+    <author email="dev@vitaltrack.app" href="https://vitaltrack.app">VitalTrack</author>
+    <content src="index.html" />
+    <meta content="default-src 'self' data: gap:;&#xA;                   style-src 'self' 'unsafe-inline';&#xA;                   script-src 'self' 'unsafe-inline' 'unsafe-eval';&#xA;                   font-src 'self' data:;&#xA;                   media-src *;&#xA;                   img-src 'self' data: content:;" http-equiv="Content-Security-Policy" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-navigation href="*" />
+    <platform name="android">
+        <allow-intent href="market:*" />
+        <preference name="android-minSdkVersion" value="22" />
+        <preference name="android-targetSdkVersion" value="36" />
+        <preference name="AndroidPersistentFileLocation" value="Compatibility" />
+        <preference name="AndroidEdgeToEdge" value="true" />
+        <resource-file src="res/android/raw/vt_watch.wav" target="app/src/main/res/raw/vt_watch.wav" />
+        <resource-file src="res/android/raw/vt_review.wav" target="app/src/main/res/raw/vt_review.wav" />
+        <resource-file src="res/android/raw/vt_urgent.wav" target="app/src/main/res/raw/vt_urgent.wav" />
+        <config-file parent="/manifest" target="AndroidManifest.xml">
+            <uses-permission android:name="android.permission.VIBRATE" />
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+            <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+            <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+            <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+            <uses-permission android:name="android.permission.WAKE_LOCK" />
+        </config-file>
+    </platform>
+    <platform name="ios">
+        <allow-intent href="itms:*" />
+        <allow-intent href="itms-apps:*" />
+        <preference name="deployment-target" value="13.0" />
+    </platform>
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="android-windowSoftInputMode" value="adjustResize" />
+    <preference name="Orientation" value="portrait" />
+    <preference name="StatusBarOverlaysWebView" value="true" />
+    <preference name="StatusBarBackgroundColor" value="#000000" />
+    <preference name="StatusBarStyle" value="lightcontent" />
+    <preference name="ScrollEnabled" value="false" />
+    <preference name="BackgroundColor" value="#000000" />
+    <plugin name="cordova-plugin-local-notification" spec="^1.2.3" />
+    <plugin name="cordova-plugin-device" spec="^3.0.0" />
+    <plugin name="cordova-plugin-vibration" spec="^3.1.1" />
+    <plugin name="cordova-plugin-x-socialsharing" spec="^6.0.4" />
+</widget>

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#000">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0,
+                 maximum-scale=1.0, user-scalable=no,
+                 viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' data: gap:;
+                 style-src 'self' 'unsafe-inline';
+                 script-src 'self' 'unsafe-inline' 'unsafe-eval';
+                 font-src 'self' data:;
+                 media-src *;
+                 img-src 'self' data: content:;" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+
+  <title>VitalTrack</title>
+  <link rel="stylesheet" href="css/index.css" />
+
+  <!-- Bundled locally so the app works with no network -->
+  <script src="js/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div id="notification-container" aria-live="polite" role="status"></div>
+
+  <!-- ═══════════════════════════════════════════════════
+       CORDOVA BOOT SPLASH
+  ═══════════════════════════════════════════════════ -->
+  <div id="device-splash">
+    <div class="splash-inner">
+      <svg width="74" height="74" viewBox="0 0 74 74" fill="none" aria-hidden="true">
+        <circle cx="37" cy="37" r="30" stroke="#FA114F" stroke-opacity=".22" stroke-width="7"/>
+        <path d="M37 7a30 30 0 0 1 0 60" stroke="#FA114F" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="37" cy="37" r="20" stroke="#92E82A" stroke-opacity=".22" stroke-width="7"/>
+        <path d="M37 17a20 20 0 0 1 14.1 34.1" stroke="#92E82A" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="37" cy="37" r="10" stroke="#1EE4E1" stroke-opacity=".22" stroke-width="7"/>
+        <path d="M37 27a10 10 0 0 1 0 20" stroke="#1EE4E1" stroke-width="7" stroke-linecap="round"/>
+      </svg>
+      <div class="splash-title">VitalTrack</div>
+      <div class="splash-status" id="splash-status">Initializing device…</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       APP SHELL
+  ═══════════════════════════════════════════════════ -->
+  <div id="app" style="display:none">
+
+    <!-- ── SUMMARY ─────────────────────────────────────── -->
+    <section class="tab-panel active" id="tab-summary">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <div class="eyebrow" id="summary-eyebrow">TODAY</div>
+          <h1 class="page-title">Summary</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="avatar" aria-label="Patient Khaled">K</div>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+
+        <!-- Session control -->
+        <div class="session-card">
+          <span class="pulse-dot" id="pulse-dot" aria-hidden="true"></span>
+          <div class="session-text">
+            <div class="session-status" id="telemetry-status">Session idle</div>
+            <div class="session-timer" id="telemetry-timer">Start to record vitals</div>
+          </div>
+          <button class="pill-btn" id="btn-tele-toggle" type="button">Start</button>
+        </div>
+
+        <!-- Native capability chips -->
+        <div class="native-badges" id="native-badges">
+          <div class="nb" id="nb-vibration"><span class="nb-dot"></span>Vibration</div>
+          <div class="nb" id="nb-notification"><span class="nb-dot"></span>Notifications</div>
+          <div class="nb" id="nb-network"><span class="nb-dot"></span>Native</div>
+        </div>
+
+        <!-- Activity rings -->
+        <div class="hero-card">
+          <canvas id="metricRing" width="200" height="200"
+                  aria-label="Activity rings"></canvas>
+          <div class="ring-legend">
+            <div class="legend-item">
+              <div class="legend-label move">MOVE</div>
+              <div class="legend-value"><span id="legend-move">0</span><span class="legend-goal">/500 KCAL</span></div>
+            </div>
+            <div class="legend-item">
+              <div class="legend-label exercise">EXERCISE</div>
+              <div class="legend-value"><span id="legend-exercise">0</span><span class="legend-goal">/30 MIN</span></div>
+            </div>
+            <div class="legend-item">
+              <div class="legend-label stand">HEART PTS</div>
+              <div class="legend-value"><span id="legend-stand">0</span><span class="legend-goal">/20 PTS</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity tiles -->
+        <div class="tile-grid">
+          <div class="metric-tile">
+            <div class="tile-head"><span class="tile-ico teal"><svg viewBox="0 0 24 24" fill="none"><path d="M13.5 5.5a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8ZM10 21l1-4.4 2.1 2V21h2v-7.5l-2.1-2 .6-3a6.6 6.6 0 0 0 5.4 2.5v-2a4.7 4.7 0 0 1-4.3-2.4l-1-1.6a2 2 0 0 0-1.7-1c-.3 0-.5.1-.8.1L6.2 6.3V11h2V7.6l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4" fill="currentColor"/></svg></span>STEPS</div>
+            <div class="tile-value"><span id="tile-steps">0</span></div>
+            <div class="tile-sub">Goal 5,000</div>
+          </div>
+          <div class="metric-tile">
+            <div class="tile-head"><span class="tile-ico blue"><svg viewBox="0 0 24 24" fill="none"><path d="M3 17 9 11l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 7h6v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>DISTANCE</div>
+            <div class="tile-value"><span id="tile-km">0.0</span><span class="tile-unit">km</span></div>
+            <div class="tile-sub">From step count</div>
+          </div>
+          <div class="metric-tile">
+            <div class="tile-head"><span class="tile-ico green"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2s6 6.4 6 11a6 6 0 1 1-12 0c0-4.6 6-11 6-11Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 18a3 3 0 0 0 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>ACTIVE</div>
+            <div class="tile-value"><span id="tile-min">0</span><span class="tile-unit">min</span></div>
+            <div class="tile-sub">Moving time</div>
+          </div>
+          <div class="metric-tile">
+            <div class="tile-head"><span class="tile-ico pink"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.6 12 20 12 20Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>WEEKLY</div>
+            <div class="tile-value"><span id="tile-weekly">0</span><span class="tile-unit">pts</span></div>
+            <div class="tile-sub">Target 150 pts</div>
+          </div>
+        </div>
+
+        <!-- Live vitals -->
+        <div class="section-label">LIVE VITALS</div>
+        <div class="tile-grid">
+          <div class="metric-tile vital-tile">
+            <div class="tile-head"><span class="tile-ico pink"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21S3 15.2 3 8.8A4.8 4.8 0 0 1 12 6a4.8 4.8 0 0 1 9 2.8C21 15.2 12 21 12 21Z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.7"/></svg></span>HEART RATE<span class="trend" id="trend-hr">↔</span></div>
+            <div class="vital-value" id="v-hr">72 <span>BPM</span></div>
+          </div>
+          <div class="metric-tile vital-tile">
+            <div class="tile-head"><span class="tile-ico cyan"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><text x="12" y="16" text-anchor="middle" fill="currentColor" font-size="8" font-weight="700" font-family="Inter, sans-serif">O2</text></svg></span>BLOOD OXYGEN<span class="trend" id="trend-spo2">↔</span></div>
+            <div class="vital-value" id="v-spo2">98 <span>%</span></div>
+          </div>
+          <div class="metric-tile vital-tile">
+            <div class="tile-head"><span class="tile-ico green"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>RESPIRATION<span class="trend" id="trend-rr">↔</span></div>
+            <div class="vital-value" id="v-rr">16 <span>br/min</span></div>
+          </div>
+          <div class="metric-tile vital-tile">
+            <div class="tile-head"><span class="tile-ico gold"><svg viewBox="0 0 24 24" fill="none"><path d="M12 13.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 13.5V21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9 18.5h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>TEMPERATURE<span class="trend" id="trend-temp">↔</span></div>
+            <div class="vital-value" id="v-temp">36.6 <span>°C</span></div>
+          </div>
+        </div>
+
+        <!-- Daily goals -->
+        <div class="section-label">DAILY GOALS</div>
+        <div class="group-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Last 7 days</div>
+              <div class="card-sub">Steps &amp; heart points</div>
+            </div>
+            <div class="card-aside"><span id="goals-count">0</span>/7 achieved</div>
+          </div>
+          <div class="goals-week" id="goals-week"></div>
+
+          <div class="goal-row">
+            <div class="goal-head"><span>Steps</span><span><span id="val-steps">0</span> / 5,000</span></div>
+            <div class="progress-track"><div class="progress-fill green" id="prog-steps" style="width:0%"></div></div>
+          </div>
+          <div class="goal-row">
+            <div class="goal-head"><span>Heart Points</span><span><span id="val-hp">0</span> / 20</span></div>
+            <div class="progress-track"><div class="progress-fill pink" id="prog-hp" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <!-- Weekly target -->
+        <div class="section-label">WEEKLY TARGET</div>
+        <div class="group-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">WHO activity goal</div>
+              <div class="card-sub" id="weekly-range">This week</div>
+            </div>
+            <div class="weekly-score"><span id="weekly-pts">0</span><span class="weekly-of"> of 150</span></div>
+          </div>
+          <div class="progress-track"><div class="progress-fill pink" id="prog-weekly" style="width:0%"></div></div>
+          <div class="card-note">150 Heart Points a week is the WHO recommendation for adults.</div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+      </div>
+    </section>
+
+    <!-- ── HEALTH ──────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-health">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <div class="eyebrow">LIVE TELEMETRY</div>
+          <h1 class="page-title">Health</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="avatar" aria-label="Patient Khaled">K</div>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+        <div class="chart-card">
+          <div class="chart-head">
+            <div class="chart-name pink">Heart Rate</div>
+            <div class="chart-current pink"><span id="chart-hr-val">72</span> <span class="chart-unit">BPM</span></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chartHR"></canvas></div>
+          <div class="chart-stats">
+            <span>MIN <b id="hr-min">—</b></span>
+            <span>AVG <b id="hr-avg">—</b></span>
+            <span>MAX <b id="hr-max">—</b></span>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <div class="chart-name cyan">Blood Oxygen</div>
+            <div class="chart-current cyan"><span id="chart-spo2-val">98</span> <span class="chart-unit">%</span></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chartSpO2"></canvas></div>
+          <div class="chart-stats">
+            <span>MIN <b id="spo2-min">—</b></span>
+            <span>AVG <b id="spo2-avg">—</b></span>
+            <span>MAX <b id="spo2-max">—</b></span>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <div class="chart-name green">Respiratory Rate</div>
+            <div class="chart-current green"><span id="chart-rr-val">16</span> <span class="chart-unit">br/min</span></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chartRR"></canvas></div>
+          <div class="chart-stats">
+            <span>MIN <b id="rr-min">—</b></span>
+            <span>AVG <b id="rr-avg">—</b></span>
+            <span>MAX <b id="rr-max">—</b></span>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <div class="chart-name gold">Temperature</div>
+            <div class="chart-current gold"><span id="chart-temp-val">36.6</span> <span class="chart-unit">°C</span></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chartTemp"></canvas></div>
+          <div class="chart-stats">
+            <span>MIN <b id="temp-min">—</b></span>
+            <span>AVG <b id="temp-avg">—</b></span>
+            <span>MAX <b id="temp-max">—</b></span>
+          </div>
+        </div>
+
+        <div class="section-label">ALERT LOG</div>
+        <div class="group-card">
+          <div class="activity-log" id="activity-log">
+            <div class="log-empty">No alerts recorded in this session.</div>
+          </div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+      </div>
+    </section>
+
+    <!-- ── REPORTS ─────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-reports">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <div class="eyebrow">CLINICAL EXPORT</div>
+          <h1 class="page-title">Reports</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="avatar" aria-label="Patient Khaled">K</div>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+        <div class="report-card">
+          <div class="report-head">
+            <div>
+              <div class="eyebrow accent">PATIENT REPORT</div>
+              <div class="report-title">Vitals &amp; Activity</div>
+              <div class="report-sub" id="report-sub">Prepared on demand · PDF</div>
+            </div>
+            <span class="report-ico">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+
+          <div class="report-stats">
+            <div class="report-stat">
+              <div class="report-stat-val pink"><span id="report-stat-hr">72</span></div>
+              <div class="report-stat-label">HEART RATE</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-val cyan"><span id="report-stat-spo2">98</span></div>
+              <div class="report-stat-label">SpO2 %</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-val gold"><span id="report-stat-alerts">0</span></div>
+              <div class="report-stat-label">ALERTS</div>
+            </div>
+          </div>
+
+          <button class="btn-primary" id="btn-share-report" type="button">Share PDF report</button>
+          <button class="btn-tinted" id="btn-share-summary" type="button">Share text summary</button>
+        </div>
+
+        <div class="section-label">INCLUDED IN THE PDF</div>
+        <div class="group-card">
+          <div class="info-row">
+            <span class="info-label">Patient</span>
+            <span class="info-value" id="report-patient">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Vitals</span>
+            <span class="info-value" id="report-vitals">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Activity</span>
+            <span class="info-value" id="report-activity">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">7-day goals</span>
+            <span class="info-value" id="report-goals">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Alert history</span>
+            <span class="info-value" id="report-alerts">—</span>
+          </div>
+        </div>
+
+        <div class="section-label">GENERATED REPORTS</div>
+        <div class="group-card" id="report-history">
+          <div class="empty-state">Reports you generate stay on this screen, ready to share again.</div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+      </div>
+    </section>
+
+    <!-- ── PROFILE ─────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-profile">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <div class="eyebrow">PATIENT</div>
+          <h1 class="page-title">Profile</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="device-pill" id="device-pill">
+            <span class="device-dot" id="device-dot"></span>
+            <span id="device-label">Native</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+        <div class="profile-hero">
+          <div class="profile-avatar" id="profile-avatar">K</div>
+          <div class="profile-name" id="profile-name">Khaled</div>
+          <div class="profile-sub" id="profile-email">khaled@vitaltrack.app</div>
+          <button class="profile-edit" id="profile-edit-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            Edit details
+          </button>
+        </div>
+
+        <div class="section-label">PATIENT</div>
+        <div class="group-card">
+          <div class="info-row"><span class="info-label">Gender</span><span class="info-value" id="profile-gender">Male</span></div>
+          <div class="info-row"><span class="info-label">Date of birth</span><span class="info-value" id="profile-dob">25 Jun 2006</span></div>
+          <div class="info-row"><span class="info-label">Age</span><span class="info-value"><span id="profile-age">—</span> years</span></div>
+          <div class="info-row"><span class="info-label">Height</span><span class="info-value" id="profile-height">—</span></div>
+          <div class="info-row"><span class="info-label">Weight</span><span class="info-value" id="profile-weight">—</span></div>
+          <div class="info-row"><span class="info-label">Body mass index</span><span class="info-value" id="profile-bmi">—</span></div>
+          <div class="info-row"><span class="info-label">Phone</span><span class="info-value" id="profile-phone">—</span></div>
+          <div class="info-row"><span class="info-label">Blood type</span><span class="info-value" id="profile-blood">—</span></div>
+        </div>
+
+        <div class="section-label">NATIVE DEVICE</div>
+        <div class="group-card">
+          <div class="device-head">
+            <span class="device-ico">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </span>
+            <div class="device-info">
+              <div class="device-model" id="native-model">Detecting…</div>
+              <div class="device-line" id="native-platform">Platform —</div>
+              <div class="device-line" id="native-version">OS —</div>
+            </div>
+            <span class="device-badge" id="device-connected-dot" aria-hidden="true"></span>
+          </div>
+        </div>
+
+        <div class="section-label">ACTIVITY GOALS</div>
+        <div class="group-card">
+          <div class="info-row"><span class="info-label">Steps</span><span class="info-value">5,000 per day</span></div>
+          <div class="info-row"><span class="info-label">Heart Points</span><span class="info-value">20 per day</span></div>
+          <div class="info-row"><span class="info-label">Move</span><span class="info-value">500 kcal per day</span></div>
+          <div class="info-row"><span class="info-label">Exercise</span><span class="info-value">30 min per day</span></div>
+        </div>
+
+        <div class="section-label">ALERTS</div>
+        <div class="group-card">
+          <div class="info-row">
+            <div>
+              <div class="info-label-strong">Native alerts</div>
+              <div class="info-sub">Watch · Review · Urgent</div>
+            </div>
+            <div class="toggle-wrap">
+              <input type="checkbox" id="notif-toggle" class="toggle-input" checked />
+              <label for="notif-toggle" class="toggle-label"><span class="sr-only">Enable native alerts</span></label>
+            </div>
+          </div>
+          <div class="test-title">Test alert patterns</div>
+          <div class="test-row">
+            <button class="test-chip watch" id="test-watch" type="button">Watch · 2s</button>
+            <button class="test-chip review" id="test-review" type="button">Review · 3s</button>
+            <button class="test-chip urgent" id="test-urgent" type="button">Urgent · 5s</button>
+          </div>
+        </div>
+
+        <div class="section-label">ABOUT</div>
+        <div class="group-card">
+          <div class="info-row"><span class="info-label">Application</span><span class="info-value">VitalTrack 1.0.0</span></div>
+          <div class="info-row"><span class="info-label">Bundle ID</span><span class="info-value">com.ishan.vitaltrack</span></div>
+          <div class="info-row"><span class="info-label">PDF engine</span><span class="info-value">jsPDF 2.5.2</span></div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+      </div>
+    </section>
+
+  </div><!-- /#app -->
+
+  <!-- ═══════════════════════════════════════════════════
+       PATIENT DETAILS SHEET
+  ═══════════════════════════════════════════════════ -->
+  <div class="sheet-backdrop" id="profile-sheet" hidden>
+    <form class="sheet" id="profile-form" novalidate>
+      <div class="sheet-grabber" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div>
+          <div class="eyebrow">PATIENT DETAILS</div>
+          <h2 class="sheet-title">Your information</h2>
+        </div>
+        <button class="sheet-close" id="profile-cancel" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="sheet-body">
+        <label class="field">
+          <span class="field-label">Full name</span>
+          <input class="field-input" id="pf-name" name="name" type="text"
+                 autocomplete="name" maxlength="60" placeholder="Full name" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input class="field-input" id="pf-email" name="email" type="email"
+                 autocomplete="email" maxlength="80" inputmode="email" placeholder="you@example.com" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Phone</span>
+          <input class="field-input" id="pf-phone" name="phone" type="tel"
+                 autocomplete="tel" maxlength="24" inputmode="tel" placeholder="+1 555 0100" />
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Gender</span>
+            <select class="field-input" id="pf-gender" name="gender">
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Blood type</span>
+            <select class="field-input" id="pf-blood" name="blood">
+              <option value="">Unknown</option>
+              <option value="A+">A+</option>
+              <option value="A−">A−</option>
+              <option value="B+">B+</option>
+              <option value="B−">B−</option>
+              <option value="AB+">AB+</option>
+              <option value="AB−">AB−</option>
+              <option value="O+">O+</option>
+              <option value="O−">O−</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Height (cm)</span>
+            <input class="field-input" id="pf-height" name="height" type="number"
+                   inputmode="decimal" min="40" max="260" step="0.1" placeholder="170" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Weight (kg)</span>
+            <input class="field-input" id="pf-weight" name="weight" type="number"
+                   inputmode="decimal" min="2" max="500" step="0.1" placeholder="70" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Date of birth</span>
+          <input class="field-input" id="pf-dob" name="dob" type="date" required />
+        </label>
+
+        <div class="field-error" id="pf-error" role="alert"></div>
+      </div>
+
+      <div class="sheet-actions">
+        <button class="sheet-btn primary" type="submit">Save details</button>
+        <button class="sheet-btn" id="profile-cancel-2" type="button">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       BOTTOM NAVIGATION
+  ═══════════════════════════════════════════════════ -->
+  <nav class="bottom-nav" id="bottom-nav" style="display:none"
+       role="navigation" aria-label="Main navigation">
+    <button class="nav-btn active" data-tab="summary" type="button" aria-label="Summary">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="12" cy="12" r="5.5" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span>Summary</span>
+    </button>
+    <button class="nav-btn" data-tab="health" type="button" aria-label="Health">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none">
+        <path d="M2 12h4l2.5-6 4 12L15 12h7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Health</span>
+    </button>
+    <button class="nav-btn" data-tab="reports" type="button" aria-label="Reports">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none">
+        <path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span>Reports</span>
+    </button>
+    <button class="nav-btn" data-tab="profile" type="button" aria-label="Profile">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span>Profile</span>
+    </button>
+  </nav>
+
+  <script src="cordova.js"></script>
+  <script src="js/jspdf.umd.min.js"></script>
+  <script src="js/index.js"></script>
+</body>
+</html>

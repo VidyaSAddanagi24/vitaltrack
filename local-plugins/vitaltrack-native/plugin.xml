@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+        id="vitaltrack-native"
+        version="1.0.0">
+    <name>VitalTrackNative</name>
+    <description>Edge-to-edge window insets and emergency alert notification channels.</description>
+    <license>MIT</license>
+
+    <js-module src="www/vitaltrack-native.js" name="VitalTrackNative">
+        <clobbers target="VitalTrackNative" />
+    </js-module>
+
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="VitalTrackNative">
+                <param name="android-package" value="com.ishan.vitaltrack.nativebridge.VitalTrackNative" />
+            </feature>
+        </config-file>
+        <source-file src="src/android/VitalTrackNative.java"
+                     target-dir="src/com/ishan/vitaltrack/nativebridge" />
+    </platform>
+</plugin>

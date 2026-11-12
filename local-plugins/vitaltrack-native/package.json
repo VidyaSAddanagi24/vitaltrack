@@ -1,0 +1,16 @@
+{
+  "name": "vitaltrack-native",
+  "version": "1.0.0",
+  "description": "Edge-to-edge window insets and emergency alert notification channels for VitalTrack.",
+  "cordova": {
+    "id": "vitaltrack-native",
+    "platforms": [
+      "android"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-android"
+  ],
+  "license": "MIT"
+}
